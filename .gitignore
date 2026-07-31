@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+server/data/*.db
+server/data/*.sqlite
+
+# tsc composite build outputs for config files
+client/vite.config.js
+client/vite.config.d.ts
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads (user receipts)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+
+# Coverage
+coverage/

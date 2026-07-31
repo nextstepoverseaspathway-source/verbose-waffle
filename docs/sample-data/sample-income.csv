@@ -1,0 +1,9 @@
+Date,Source,Category,Description,Amount,PaymentMethod,ReceivedFrom,Notes
+2026-07-01,Monthly Salary,Salary,July net pay,85000,Net Banking,Acme Corp,
+2026-07-10,Freelance Project,Freelancing,Landing page build,18000,UPI,Client X,Invoice #FP-102
+2026-07-15,Dividend Payout,Dividend,Quarterly dividend,3200,Net Banking,Broker,
+2026-07-22,Cashback,Refund,Card cashback,450,Wallet,Bank,
+2026-06-01,Monthly Salary,Salary,June net pay,85000,Net Banking,Acme Corp,
+2026-06-18,Rental Income,Rental Income,Flat rent,15000,Net Banking,Tenant,
+2026-05-01,Monthly Salary,Salary,May net pay,85000,Net Banking,Acme Corp,
+2026-05-12,Bonus,Bonus,Performance bonus,20000,Net Banking,Acme Corp,Half-yearly
