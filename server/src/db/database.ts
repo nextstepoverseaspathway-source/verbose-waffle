@@ -10,14 +10,52 @@
  */
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { config } from '../config';
 
-// Ensure the data + uploads directories exist.
-fs.mkdirSync(path.dirname(config.sqlitePath), { recursive: true });
-fs.mkdirSync(config.uploadsDir, { recursive: true });
+/**
+ * Resolve a database file path we can actually write to.
+ *
+ * Hosting platforms (e.g. Render's free plan) may point SQLITE_PATH at a
+ * directory that doesn't exist or isn't writable — for example a disk mount
+ * that is only present on paid plans. Rather than crash on startup, we verify
+ * the preferred location and transparently fall back to the OS temp directory
+ * so the app always boots. (Temp storage is ephemeral; use a persistent disk
+ * or PostgreSQL for durable data — see docs/DEPLOYMENT.md.)
+ */
+function resolveWritableDbPath(preferred: string): string {
+  const fallback = path.join(os.tmpdir(), 'smart-savings.db');
+  for (const candidate of [preferred, fallback]) {
+    try {
+      const dir = path.dirname(candidate);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      return candidate;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return fallback;
+}
 
-export const db = new Database(config.sqlitePath);
+const dbPath = resolveWritableDbPath(config.sqlitePath);
+if (dbPath !== config.sqlitePath) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[db] "${config.sqlitePath}" is not writable; falling back to "${dbPath}". ` +
+      'Data here is not durable — attach a disk or use PostgreSQL for persistence.',
+  );
+}
+
+// Ensure the uploads directory exists (best-effort; non-fatal if it fails).
+try {
+  fs.mkdirSync(config.uploadsDir, { recursive: true });
+} catch {
+  // Receipt uploads will be unavailable, but the app still runs.
+}
+
+export const db = new Database(dbPath);
 
 // Pragmas for better concurrency and integrity.
 db.pragma('journal_mode = WAL');
