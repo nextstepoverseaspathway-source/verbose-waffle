@@ -21,7 +21,7 @@ services:
     name: smart-savings-tracker
     runtime: node
     plan: free
-    branch: claude/smart-savings-tracker-app-j3psl7
+    branch: main
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
