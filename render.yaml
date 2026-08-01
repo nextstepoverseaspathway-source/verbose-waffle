@@ -22,7 +22,10 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: npm install && npm run build
+    # --include=dev forces devDependencies (typescript, vite) to install even
+    # though Render sets NODE_ENV=production during the build; the build tools
+    # are needed to compile the server and bundle the client.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
