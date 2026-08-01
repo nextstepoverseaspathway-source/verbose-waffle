@@ -1,0 +1,39 @@
+name: CI
+
+# Build both workspaces and run the backend test suite on every push and PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # Installs all workspaces (server + client) from the root lockfile.
+      # better-sqlite3 compiles a native addon; ubuntu runners include the
+      # required build toolchain.
+      - name: Install dependencies
+        run: npm ci
+
+      # Compiles the server (tsc) and the client (tsc + vite build).
+      - name: Build
+        run: npm run build
+
+      # Backend integration tests (Vitest + Supertest) against a temp SQLite DB.
+      - name: Test
+        run: npm test
