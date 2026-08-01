@@ -9,6 +9,17 @@ dark mode and mobile support.
   <em>React + TypeScript · Node.js + Express · SQLite/PostgreSQL · Recharts</em>
 </p>
 
+<p align="center">
+  <a href="https://render.com/deploy?repo=https://github.com/nextstepoverseaspathway-source/verbose-waffle">
+    <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
+  </a>
+</p>
+
+> **One-click deploy:** click the button above, sign in to Render, and confirm.
+> Render reads [`render.yaml`](./render.yaml) and deploys the whole app as a
+> single web service — you'll get a public URL when it goes live. See the
+> [deployment guide](./docs/DEPLOYMENT.md) for details and other hosts (Railway, etc.).
+
 ---
 
 ## ✨ Features
