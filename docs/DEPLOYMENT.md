@@ -27,6 +27,26 @@ The same single-service model deploys just as easily to Railway, Fly.io, or any
 Node host: build with `npm run build`, start with `npm start`, health-check
 `/api/health`.
 
+## 0b. One-click deploy on Railway
+
+The repo also includes [`railway.json`](../railway.json), which tells Railway to
+build with `npm install && npm run build`, start with `npm start`, and
+health-check `/api/health`.
+
+1. Go to <https://railway.app> → **New Project → Deploy from GitHub repo**.
+2. Select this repository (and branch).
+3. In the service's **Variables** tab, set:
+   - `JWT_SECRET` — a long random string (**required**; generate with
+     `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
+   - `NODE_ENV` = `production` (recommended).
+   - *(optional)* `SQLITE_PATH` = `/data/savings.db` if you attach a volume.
+4. Deploy. Railway assigns a public domain (enable one under **Settings →
+   Networking → Generate Domain** if not automatic) — that's your URL.
+
+Railway injects `PORT` automatically and the server honors it. For durable
+data, add a **Volume** mounted at e.g. `/data` and point `SQLITE_PATH` at it;
+otherwise the SQLite file resets on redeploy (see section 5 for PostgreSQL).
+
 ## 1. Environment Variables (server)
 
 Create `server/.env` (see `server/.env.example`):
