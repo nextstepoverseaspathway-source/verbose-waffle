@@ -30,6 +30,13 @@ export const config = {
 
   /** Directory where uploaded receipts are stored. */
   uploadsDir: path.join(__dirname, '..', 'uploads'),
+
+  /**
+   * Built client assets. In production the API server also serves the SPA
+   * from here, so the whole app runs on a single origin/URL.
+   * Resolves to <repo>/client/dist relative to the compiled server (dist/).
+   */
+  clientDist: path.join(__dirname, '..', '..', 'client', 'dist'),
 } as const;
 
 export const isProd = config.env === 'production';

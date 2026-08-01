@@ -1,0 +1,48 @@
+# Render Blueprint — one-click deploy for Smart Savings Tracker.
+#
+# The whole app runs as a SINGLE web service: the Express API also serves the
+# built React SPA, so you get one URL (e.g. https://<name>.onrender.com) with
+# no separate frontend host and no CORS setup.
+#
+# How to deploy:
+#   1. Push this repo to GitHub (already done).
+#   2. Go to https://dashboard.render.com → New → Blueprint.
+#   3. Connect this repository and pick this branch.
+#   4. Click "Apply". Render builds and deploys; your URL appears when live.
+#
+# Notes:
+#   - The free plan spins down after ~15 min idle and cold-starts on the next
+#     request (first load may take ~30–60s). Upgrade the plan to keep it warm.
+#   - On the free plan the SQLite file lives on ephemeral storage and resets on
+#     redeploy/restart. To make data durable, switch to a paid plan and attach
+#     the disk block below (uncomment it) so SQLite is stored on a volume.
+services:
+  - type: web
+    name: smart-savings-tracker
+    runtime: node
+    plan: free
+    branch: claude/smart-savings-tracker-app-j3psl7
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      # A strong secret is generated once and kept across deploys.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # Store the SQLite database under the (optional) persistent disk path.
+      - key: SQLITE_PATH
+        value: /var/data/savings.db
+
+    # ---- Durable storage (paid plans) ----
+    # Uncomment to persist the SQLite database across restarts/redeploys.
+    # disk:
+    #   name: savings-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

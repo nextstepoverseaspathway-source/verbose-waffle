@@ -4,6 +4,8 @@
  */
 import cors from 'cors';
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { config } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth';
@@ -42,8 +44,19 @@ export function createApp() {
   app.use('/api/reports', reportRoutes);
   app.use('/api/settings', settingsRoutes);
 
-  // 404 for unknown API routes.
+  // 404 for unknown API routes (kept before the SPA fallback so unmatched
+  // API paths return JSON, not the HTML shell).
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+  // In production, serve the built React app from the same origin so the
+  // entire product is reachable at a single URL. Any non-API route falls
+  // back to index.html for client-side routing.
+  if (fs.existsSync(config.clientDist)) {
+    app.use(express.static(config.clientDist));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(config.clientDist, 'index.html'));
+    });
+  }
 
   app.use(errorHandler);
   return app;

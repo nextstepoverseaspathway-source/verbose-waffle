@@ -3,6 +3,30 @@
 This guide covers running Smart Savings Tracker in production with PostgreSQL,
 Firebase authentication, and a static-hosted frontend.
 
+## 0. One-click deploy on Render (get a URL fast)
+
+The repo includes a [`render.yaml`](../render.yaml) blueprint. In production the
+Express API also serves the built React SPA, so the whole app runs as a
+**single web service on one URL** — no separate frontend host, no CORS setup.
+
+1. Push the repo to GitHub.
+2. Go to <https://dashboard.render.com> → **New → Blueprint**.
+3. Connect this repository and select the branch.
+4. Click **Apply**. Render runs `npm install && npm run build`, then
+   `npm start`, and gives you a URL like `https://smart-savings-tracker.onrender.com`.
+5. Open the URL and **register an account** (a fresh deploy has no demo data;
+   run `npm run seed` locally if you want the sample dataset).
+
+Free-plan notes: the service spins down after ~15 min idle and cold-starts on
+the next request; the SQLite file is on ephemeral storage and resets on
+redeploy. For durable data, switch to a paid plan and uncomment the `disk`
+block in `render.yaml` (SQLite then lives on a mounted volume), or move to
+PostgreSQL (section 5).
+
+The same single-service model deploys just as easily to Railway, Fly.io, or any
+Node host: build with `npm run build`, start with `npm start`, health-check
+`/api/health`.
+
 ## 1. Environment Variables (server)
 
 Create `server/.env` (see `server/.env.example`):
