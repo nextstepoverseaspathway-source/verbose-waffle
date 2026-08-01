@@ -36,12 +36,16 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
-      # Store the SQLite database under the (optional) persistent disk path.
-      - key: SQLITE_PATH
-        value: /var/data/savings.db
+      # NOTE: SQLITE_PATH is intentionally left unset on the free plan so the
+      # database uses the writable default inside the project directory. On the
+      # free plan there is no mounted disk, and paths like /var/data are not
+      # writable — setting one there crashes the server on startup.
 
     # ---- Durable storage (paid plans) ----
     # Uncomment to persist the SQLite database across restarts/redeploys.
+    # When you enable the disk, also add an env var above:
+    #   - key: SQLITE_PATH
+    #     value: /var/data/savings.db
     # disk:
     #   name: savings-data
     #   mountPath: /var/data
