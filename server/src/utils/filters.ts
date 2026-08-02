@@ -31,12 +31,13 @@ export function buildTransactionFilters(
     params.push(to);
   }
   if (month) {
-    // month = YYYY-MM
-    parts.push("strftime('%Y-%m', date) = ?");
+    // month = YYYY-MM. `date` is stored as 'YYYY-MM-DD', so substr(date,1,7)
+    // yields the month on both SQLite and Postgres (dialect-neutral).
+    parts.push('substr(date, 1, 7) = ?');
     params.push(month);
   }
   if (year) {
-    parts.push("strftime('%Y', date) = ?");
+    parts.push('substr(date, 1, 4) = ?');
     params.push(year);
   }
   if (category) {

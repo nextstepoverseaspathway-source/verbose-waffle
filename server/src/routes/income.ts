@@ -24,9 +24,9 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { clause, params } = buildTransactionFilters(req, currentUserId(res), SEARCH_COLS);
-    const rows = db
+    const rows = (await db
       .prepare(`SELECT * FROM incomes WHERE ${clause} ORDER BY date DESC, id DESC`)
-      .all(...params) as Income[];
+      .all(...params)) as Income[];
     res.json({ data: rows });
   }),
 );
@@ -35,15 +35,15 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const body = incomeSchema.parse(req.body);
-    const info = db
+    const inserted = await db
       .prepare(
         `INSERT INTO incomes
          (user_id, date, source, category, description, amount, payment_method,
           received_from, reference_number, recurring, notes)
          VALUES (@user_id, @date, @source, @category, @description, @amount, @payment_method,
-                 @received_from, @reference_number, @recurring, @notes)`,
+                 @received_from, @reference_number, @recurring, @notes) RETURNING id`,
       )
-      .run({
+      .get({
         user_id: currentUserId(res),
         date: body.date,
         source: body.source,
@@ -56,7 +56,7 @@ router.post(
         recurring: body.recurring ? 1 : 0,
         notes: body.notes ?? null,
       });
-    const row = db.prepare('SELECT * FROM incomes WHERE id = ?').get(info.lastInsertRowid);
+    const row = await db.prepare('SELECT * FROM incomes WHERE id = ?').get(inserted!.id);
     res.status(201).json({ data: row });
   }),
 );
@@ -64,9 +64,9 @@ router.post(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const row = db
+    const row = await db
       .prepare('SELECT * FROM incomes WHERE id = ? AND user_id = ?')
-      .get(req.params.id, currentUserId(res));
+      .get(Number(req.params.id), currentUserId(res));
     if (!row) throw new ApiError(404, 'Income entry not found');
     res.json({ data: row });
   }),
@@ -76,7 +76,7 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const body = incomeSchema.parse(req.body);
-    const result = db
+    const result = await db
       .prepare(
         `UPDATE incomes SET
            date=@date, source=@source, category=@category, description=@description,
@@ -85,7 +85,7 @@ router.put(
          WHERE id=@id AND user_id=@user_id`,
       )
       .run({
-        id: req.params.id,
+        id: Number(req.params.id),
         user_id: currentUserId(res),
         date: body.date,
         source: body.source,
@@ -99,7 +99,7 @@ router.put(
         notes: body.notes ?? null,
       });
     if (result.changes === 0) throw new ApiError(404, 'Income entry not found');
-    const row = db.prepare('SELECT * FROM incomes WHERE id = ?').get(req.params.id);
+    const row = await db.prepare('SELECT * FROM incomes WHERE id = ?').get(Number(req.params.id));
     res.json({ data: row });
   }),
 );
@@ -107,9 +107,9 @@ router.put(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const result = db
+    const result = await db
       .prepare('DELETE FROM incomes WHERE id = ? AND user_id = ?')
-      .run(req.params.id, currentUserId(res));
+      .run(Number(req.params.id), currentUserId(res));
     if (result.changes === 0) throw new ApiError(404, 'Income entry not found');
     res.status(204).end();
   }),

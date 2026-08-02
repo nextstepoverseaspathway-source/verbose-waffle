@@ -40,9 +40,9 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { clause, params } = buildTransactionFilters(req, currentUserId(res), SEARCH_COLS);
-    const rows = db
+    const rows = (await db
       .prepare(`SELECT * FROM expenses WHERE ${clause} ORDER BY date DESC, id DESC`)
-      .all(...params) as Expense[];
+      .all(...params)) as Expense[];
     res.json({ data: rows });
   }),
 );
@@ -51,15 +51,15 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const body = expenseSchema.parse(req.body);
-    const info = db
+    const inserted = await db
       .prepare(
         `INSERT INTO expenses
          (user_id, date, category, subcategory, description, amount, payment_method,
           vendor, tax, recurring, notes)
          VALUES (@user_id, @date, @category, @subcategory, @description, @amount, @payment_method,
-                 @vendor, @tax, @recurring, @notes)`,
+                 @vendor, @tax, @recurring, @notes) RETURNING id`,
       )
-      .run({
+      .get({
         user_id: currentUserId(res),
         date: body.date,
         category: body.category,
@@ -72,7 +72,7 @@ router.post(
         recurring: body.recurring ? 1 : 0,
         notes: body.notes ?? null,
       });
-    const row = db.prepare('SELECT * FROM expenses WHERE id = ?').get(info.lastInsertRowid);
+    const row = await db.prepare('SELECT * FROM expenses WHERE id = ?').get(inserted!.id);
     res.status(201).json({ data: row });
   }),
 );
@@ -80,9 +80,9 @@ router.post(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const row = db
+    const row = await db
       .prepare('SELECT * FROM expenses WHERE id = ? AND user_id = ?')
-      .get(req.params.id, currentUserId(res));
+      .get(Number(req.params.id), currentUserId(res));
     if (!row) throw new ApiError(404, 'Expense entry not found');
     res.json({ data: row });
   }),
@@ -92,7 +92,7 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const body = expenseSchema.parse(req.body);
-    const result = db
+    const result = await db
       .prepare(
         `UPDATE expenses SET
            date=@date, category=@category, subcategory=@subcategory, description=@description,
@@ -101,7 +101,7 @@ router.put(
          WHERE id=@id AND user_id=@user_id`,
       )
       .run({
-        id: req.params.id,
+        id: Number(req.params.id),
         user_id: currentUserId(res),
         date: body.date,
         category: body.category,
@@ -115,7 +115,7 @@ router.put(
         notes: body.notes ?? null,
       });
     if (result.changes === 0) throw new ApiError(404, 'Expense entry not found');
-    const row = db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.id);
+    const row = await db.prepare('SELECT * FROM expenses WHERE id = ?').get(Number(req.params.id));
     res.json({ data: row });
   }),
 );
@@ -123,9 +123,9 @@ router.put(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const result = db
+    const result = await db
       .prepare('DELETE FROM expenses WHERE id = ? AND user_id = ?')
-      .run(req.params.id, currentUserId(res));
+      .run(Number(req.params.id), currentUserId(res));
     if (result.changes === 0) throw new ApiError(404, 'Expense entry not found');
     res.status(204).end();
   }),
@@ -137,9 +137,9 @@ router.post(
   asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, 'No receipt file uploaded');
     const relative = `/uploads/${req.file.filename}`;
-    const result = db
+    const result = await db
       .prepare('UPDATE expenses SET receipt_path = ? WHERE id = ? AND user_id = ?')
-      .run(relative, req.params.id, currentUserId(res));
+      .run(relative, Number(req.params.id), currentUserId(res));
     if (result.changes === 0) throw new ApiError(404, 'Expense entry not found');
     res.json({ data: { receipt_path: relative } });
   }),

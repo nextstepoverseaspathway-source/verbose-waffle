@@ -1,7 +1,8 @@
 /**
  * Analytics helpers: monthly aggregation, savings statistics, and the
- * heuristic "AI" insight generator. All computations are pure functions of
- * rows read from the database, so they are easy to unit test.
+ * heuristic "AI" insight generator. All read from the database via the async
+ * adapter and are written in dialect-neutral SQL (substr instead of strftime),
+ * so they run identically on SQLite and Postgres.
  */
 import { db } from '../db/database';
 
@@ -12,27 +13,31 @@ export interface MonthlyPoint {
   savings: number;
 }
 
+const num = (v: unknown): number => (v == null ? 0 : Number(v)) || 0;
+
 /** Aggregate income and expenses by month for a user (optionally a year). */
-export function monthlySeries(userId: number, year?: string): MonthlyPoint[] {
-  const yearClause = year ? "AND strftime('%Y', date) = @year" : '';
-  const income = db
+export async function monthlySeries(userId: number, year?: string): Promise<MonthlyPoint[]> {
+  const yearClause = year ? 'AND substr(date, 1, 4) = ?' : '';
+  const params = year ? [userId, year] : [userId];
+
+  const income = await db
     .prepare(
-      `SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total
-       FROM incomes WHERE user_id = @userId ${yearClause} GROUP BY month`,
+      `SELECT substr(date, 1, 7) AS month, SUM(amount) AS total
+       FROM incomes WHERE user_id = ? ${yearClause} GROUP BY substr(date, 1, 7)`,
     )
-    .all({ userId, year }) as { month: string; total: number }[];
-  const expense = db
+    .all(...params);
+  const expense = await db
     .prepare(
-      `SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total
-       FROM expenses WHERE user_id = @userId ${yearClause} GROUP BY month`,
+      `SELECT substr(date, 1, 7) AS month, SUM(amount) AS total
+       FROM expenses WHERE user_id = ? ${yearClause} GROUP BY substr(date, 1, 7)`,
     )
-    .all({ userId, year }) as { month: string; total: number }[];
+    .all(...params);
 
   const map = new Map<string, MonthlyPoint>();
   const ensure = (m: string) =>
     map.get(m) ?? map.set(m, { month: m, income: 0, expense: 0, savings: 0 }).get(m)!;
-  income.forEach((r) => (ensure(r.month).income = r.total));
-  expense.forEach((r) => (ensure(r.month).expense = r.total));
+  income.forEach((r) => (ensure(String(r.month)).income = num(r.total)));
+  expense.forEach((r) => (ensure(String(r.month)).expense = num(r.total)));
   const series = [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
   series.forEach((p) => (p.savings = p.income - p.expense));
   return series;
@@ -47,8 +52,8 @@ export interface SavingsStats {
   worstMonth: MonthlyPoint | null;
 }
 
-export function savingsStats(userId: number): SavingsStats {
-  const series = monthlySeries(userId);
+export async function savingsStats(userId: number): Promise<SavingsStats> {
+  const series = await monthlySeries(userId);
   const now = new Date().toISOString().slice(0, 7);
   const year = now.slice(0, 4);
 
@@ -73,17 +78,18 @@ export function savingsStats(userId: number): SavingsStats {
 }
 
 /** Expense totals grouped by category for a given month (YYYY-MM). */
-export function expenseByCategory(
+export async function expenseByCategory(
   userId: number,
   month: string,
-): { category: string; total: number }[] {
-  return db
+): Promise<{ category: string; total: number }[]> {
+  const rows = await db
     .prepare(
       `SELECT category, SUM(amount) AS total
-       FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?
+       FROM expenses WHERE user_id = ? AND substr(date, 1, 7) = ?
        GROUP BY category ORDER BY total DESC`,
     )
-    .all(userId, month) as { category: string; total: number }[];
+    .all(userId, month);
+  return rows.map((r) => ({ category: String(r.category), total: num(r.total) }));
 }
 
 /**
@@ -92,29 +98,24 @@ export function expenseByCategory(
  *  - budget adherence (up to 25 pts)
  *  - having active goals (up to 25 pts)
  */
-export function financialHealthScore(userId: number): number {
-  const stats = savingsStats(userId);
+export async function financialHealthScore(userId: number): Promise<number> {
+  const stats = await savingsStats(userId);
   const now = new Date().toISOString().slice(0, 7);
 
   const rateScore = Math.max(0, Math.min(50, (stats.savingsRate / 30) * 50)); // 30% rate == full
 
-  const monthlyBudget =
-    (db.prepare('SELECT monthly_budget FROM users WHERE id = ?').get(userId) as
-      | { monthly_budget: number }
-      | undefined)?.monthly_budget ?? 0;
-  const spent =
-    (db
-      .prepare(
-        "SELECT SUM(amount) AS t FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?",
-      )
-      .get(userId, now) as { t: number | null }).t ?? 0;
+  const userRow = await db.prepare('SELECT monthly_budget FROM users WHERE id = ?').get(userId);
+  const monthlyBudget = num(userRow?.monthly_budget);
+
+  const spentRow = await db
+    .prepare('SELECT SUM(amount) AS t FROM expenses WHERE user_id = ? AND substr(date, 1, 7) = ?')
+    .get(userId, now);
+  const spent = num(spentRow?.t);
   const budgetScore =
     monthlyBudget > 0 ? Math.max(0, Math.min(25, (1 - spent / monthlyBudget) * 25)) : 12.5;
 
-  const goalCount =
-    (db.prepare('SELECT COUNT(*) AS c FROM goals WHERE user_id = ?').get(userId) as { c: number })
-      .c;
-  const goalScore = goalCount > 0 ? 25 : 0;
+  const goalRow = await db.prepare('SELECT COUNT(*) AS c FROM goals WHERE user_id = ?').get(userId);
+  const goalScore = num(goalRow?.c) > 0 ? 25 : 0;
 
   return Math.round(rateScore + budgetScore + goalScore);
 }
@@ -123,8 +124,8 @@ export function financialHealthScore(userId: number): number {
  * Heuristic monthly insights. Compares the current month with the previous
  * one and surfaces human-readable observations and suggestions.
  */
-export function generateInsights(userId: number): string[] {
-  const series = monthlySeries(userId);
+export async function generateInsights(userId: number): Promise<string[]> {
+  const series = await monthlySeries(userId);
   if (series.length === 0) return ['Add some income and expenses to unlock personalized insights.'];
 
   const now = new Date().toISOString().slice(0, 7);
@@ -140,14 +141,14 @@ export function generateInsights(userId: number): string[] {
   }
 
   // Category comparison vs previous month.
-  const cats = expenseByCategory(userId, current.month);
+  const cats = await expenseByCategory(userId, current.month);
   if (cats.length) {
     const top = cats.slice(0, 3).map((c) => c.category);
     insights.push(`Your top expense categories are: ${top.join(', ')}.`);
 
     if (previous) {
       const prevCats = new Map(
-        expenseByCategory(userId, previous.month).map((c) => [c.category, c.total]),
+        (await expenseByCategory(userId, previous.month)).map((c) => [c.category, c.total]),
       );
       for (const c of cats.slice(0, 5)) {
         const prev = prevCats.get(c.category) ?? 0;
@@ -163,16 +164,15 @@ export function generateInsights(userId: number): string[] {
   }
 
   // Suggested saving target: 20% of average income.
-  const avgIncome =
-    series.reduce((s, p) => s + p.income, 0) / Math.max(1, series.length);
+  const avgIncome = series.reduce((s, p) => s + p.income, 0) / Math.max(1, series.length);
   if (avgIncome > 0) {
-    insights.push(
-      `A healthy monthly saving target for you is about ${Math.round(avgIncome * 0.2)}.`,
-    );
+    insights.push(`A healthy monthly saving target for you is about ${Math.round(avgIncome * 0.2)}.`);
   }
 
   if (current.savings < 0) {
-    insights.push('Heads up: your expenses exceeded your income this month. Review discretionary spending.');
+    insights.push(
+      'Heads up: your expenses exceeded your income this month. Review discretionary spending.',
+    );
   }
 
   return insights;

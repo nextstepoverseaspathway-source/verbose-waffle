@@ -108,14 +108,34 @@ location /api/     { proxy_pass http://127.0.0.1:4000; }
 location /uploads/ { proxy_pass http://127.0.0.1:4000; }
 ```
 
-## 5. PostgreSQL
+## 5. PostgreSQL (durable data — recommended for production)
 
-1. Provision a PostgreSQL database and set `DATABASE_URL`.
-2. Adapt `server/src/db/database.ts` to a `pg` pool (or an ORM). The route
-   layer uses parameterized SQL and does not need changes — only the thin
-   adapter that exposes `prepare().run/get/all`.
-3. Apply the schema from `server/src/db/schema.sql` with the type mappings in
-   [DATABASE.md](./DATABASE.md).
+PostgreSQL support is **built in**. The database adapter
+(`server/src/db/database.ts`) uses SQLite by default and switches to Postgres
+automatically when `DATABASE_URL` is set — no code changes needed. The schema
+is created on startup from `server/src/db/schema.postgres.sql`, and queries are
+written in a dialect-neutral subset so they run on both backends.
+
+### Quick setup with a free Neon database
+
+1. Create a free project at <https://neon.tech> (the free tier is durable and
+   does not expire).
+2. Copy the **connection string** it gives you, e.g.
+   `postgres://user:password@ep-xxx.aws.neon.tech/neondb?sslmode=require`.
+3. Set it as `DATABASE_URL` on your host:
+   - **Render:** open the service → **Environment** → add `DATABASE_URL` →
+     paste the string → **Save** (the service redeploys automatically).
+   - **Railway/other:** add `DATABASE_URL` in the service's variables.
+4. On the next deploy the app creates its tables in Postgres and stores all
+   data there. Restarts and redeploys no longer lose data.
+
+> The same works with any managed Postgres (Render Postgres, Supabase, RDS,
+> etc.) — only the connection string differs. TLS is enabled by default in the
+> adapter, which managed providers require.
+
+Prefer keeping SQLite but making it durable instead? Attach a persistent disk
+(paid) and point `SQLITE_PATH` at the mount — see the commented block in
+[`render.yaml`](../render.yaml).
 
 ## 6. Firebase Authentication (Google & Email)
 

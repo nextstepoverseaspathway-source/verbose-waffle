@@ -39,17 +39,14 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
-      # NOTE: SQLITE_PATH is intentionally left unset on the free plan so the
-      # database uses the writable default inside the project directory. On the
-      # free plan there is no mounted disk, and paths like /var/data are not
-      # writable — setting one there crashes the server on startup.
-
-    # ---- Durable storage (paid plans) ----
-    # Uncomment to persist the SQLite database across restarts/redeploys.
-    # When you enable the disk, also add an env var above:
-    #   - key: SQLITE_PATH
-    #     value: /var/data/savings.db
-    # disk:
-    #   name: savings-data
-    #   mountPath: /var/data
-    #   sizeGB: 1
+      # DURABLE STORAGE (recommended): set DATABASE_URL to a PostgreSQL
+      # connection string and the app stores everything in Postgres, which
+      # survives restarts and redeploys. Create a free database (e.g. Neon —
+      # https://neon.tech) and paste its connection string in the Render
+      # dashboard (Environment tab). `sync: false` means Render prompts for the
+      # value instead of committing it to the repo.
+      #
+      # Without DATABASE_URL the app falls back to SQLite in ephemeral storage,
+      # which resets on restart — fine for a quick demo, not for real data.
+      - key: DATABASE_URL
+        sync: false

@@ -6,19 +6,17 @@
  * Demo login: demo@savings.app / demo1234
  */
 import bcrypt from 'bcryptjs';
-import { db, initSchema } from './database';
-
-initSchema();
+import { db, initDb } from './database';
 
 const DEMO_EMAIL = 'demo@savings.app';
 const DEMO_PASSWORD = 'demo1234';
 
-function reset() {
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(DEMO_EMAIL) as
+async function reset() {
+  const existing = (await db.prepare('SELECT id FROM users WHERE email = ?').get(DEMO_EMAIL)) as
     | { id: number }
     | undefined;
   if (existing) {
-    db.prepare('DELETE FROM users WHERE id = ?').run(existing.id); // cascades to all data
+    await db.prepare('DELETE FROM users WHERE id = ?').run(existing.id); // cascades to all data
   }
 }
 
@@ -26,16 +24,17 @@ function isoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function seed() {
-  reset();
+async function seed() {
+  await initDb();
+  await reset();
   const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
-  const userInfo = db
+  const userRow = await db
     .prepare(
       `INSERT INTO users (email, name, password_hash, provider, currency, theme, monthly_budget)
-       VALUES (?, ?, ?, 'email', 'INR', 'system', 60000)`,
+       VALUES (?, ?, ?, 'email', 'INR', 'system', 60000) RETURNING id`,
     )
-    .run(DEMO_EMAIL, 'Demo User', hash);
-  const userId = Number(userInfo.lastInsertRowid);
+    .get(DEMO_EMAIL, 'Demo User', hash);
+  const userId = Number(userRow!.id);
 
   const now = new Date();
   const insertIncome = db.prepare(
@@ -67,9 +66,9 @@ function seed() {
     const month = d.getMonth() + 1;
 
     // Salary + occasional freelancing.
-    insertIncome.run(userId, isoDate(year, month, 1), 'Monthly Salary', 'Salary', 'Net pay', 85000, 'Net Banking', 1);
+    await insertIncome.run(userId, isoDate(year, month, 1), 'Monthly Salary', 'Salary', 'Net pay', 85000, 'Net Banking', 1);
     if (back % 2 === 0) {
-      insertIncome.run(
+      await insertIncome.run(
         userId,
         isoDate(year, month, 15),
         'Side Project',
@@ -82,9 +81,10 @@ function seed() {
     }
 
     // Expenses with a little month-to-month variance.
-    expenseTemplates.forEach(([cat, sub, base, method, recurring], i) => {
+    for (let i = 0; i < expenseTemplates.length; i++) {
+      const [cat, sub, base, method, recurring] = expenseTemplates[i];
       const variance = Math.round((Math.sin(back + i) * 0.15 + 1) * base);
-      insertExpense.run(
+      await insertExpense.run(
         userId,
         isoDate(year, month, Math.min(28, 3 + i * 3)),
         cat,
@@ -95,18 +95,22 @@ function seed() {
         `${sub} Vendor`,
         recurring,
       );
-    });
+    }
   }
 
   // Goals.
-  db.prepare(
-    `INSERT INTO goals (user_id, name, type, target_amount, current_amount, deadline, monthly_contribution)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(userId, 'Emergency Fund', 'Emergency Fund', 300000, 145000, isoDate(now.getFullYear() + 1, 3, 31), 15000);
-  db.prepare(
-    `INSERT INTO goals (user_id, name, type, target_amount, current_amount, deadline, monthly_contribution)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(userId, 'Goa Vacation', 'Vacation', 80000, 32000, isoDate(now.getFullYear(), 12, 20), 8000);
+  await db
+    .prepare(
+      `INSERT INTO goals (user_id, name, type, target_amount, current_amount, deadline, monthly_contribution)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(userId, 'Emergency Fund', 'Emergency Fund', 300000, 145000, isoDate(now.getFullYear() + 1, 3, 31), 15000);
+  await db
+    .prepare(
+      `INSERT INTO goals (user_id, name, type, target_amount, current_amount, deadline, monthly_contribution)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(userId, 'Goa Vacation', 'Vacation', 80000, 32000, isoDate(now.getFullYear(), 12, 20), 8000);
 
   // Budgets for the current month.
   const currentMonth = now.toISOString().slice(0, 7);
@@ -117,14 +121,18 @@ function seed() {
     ['Entertainment', 2000],
     ['Shopping', 6000],
   ];
-  budgets.forEach(([cat, amt]) =>
-    db
+  for (const [cat, amt] of budgets) {
+    await db
       .prepare('INSERT INTO budgets (user_id, category, month, amount) VALUES (?, ?, ?, ?)')
-      .run(userId, cat, currentMonth, amt),
-  );
+      .run(userId, cat, currentMonth, amt);
+  }
 
   // eslint-disable-next-line no-console
   console.log(`✅ Seeded demo user.\n   Email: ${DEMO_EMAIL}\n   Password: ${DEMO_PASSWORD}`);
 }
 
-seed();
+seed().catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error('Seed failed:', err);
+  process.exit(1);
+});

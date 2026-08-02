@@ -25,24 +25,22 @@ router.get(
     const userId = currentUserId(res);
     const month = String(req.query.month ?? new Date().toISOString().slice(0, 7));
 
-    const income = db
-      .prepare(
-        "SELECT SUM(amount) AS t FROM incomes WHERE user_id = ? AND strftime('%Y-%m', date) = ?",
-      )
-      .get(userId, month) as { t: number | null };
-    const expense = db
-      .prepare(
-        "SELECT SUM(amount) AS t FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?",
-      )
-      .get(userId, month) as { t: number | null };
+    const income = (await db
+      .prepare("SELECT SUM(amount) AS t FROM incomes WHERE user_id = ? AND substr(date, 1, 7) = ?")
+      .get(userId, month)) as { t: number | null } | undefined;
+    const expense = (await db
+      .prepare("SELECT SUM(amount) AS t FROM expenses WHERE user_id = ? AND substr(date, 1, 7) = ?")
+      .get(userId, month)) as { t: number | null } | undefined;
 
+    const totalIncome = Number(income?.t ?? 0) || 0;
+    const totalExpenses = Number(expense?.t ?? 0) || 0;
     res.json({
       type: 'monthly',
       month,
-      totalIncome: income.t ?? 0,
-      totalExpenses: expense.t ?? 0,
-      savings: (income.t ?? 0) - (expense.t ?? 0),
-      categories: expenseByCategory(userId, month),
+      totalIncome,
+      totalExpenses,
+      savings: totalIncome - totalExpenses,
+      categories: await expenseByCategory(userId, month),
     });
   }),
 );
@@ -52,7 +50,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const userId = currentUserId(res);
     const year = String(req.query.year ?? new Date().getFullYear());
-    const series = monthlySeries(userId, year);
+    const series = await monthlySeries(userId, year);
     res.json({
       type: 'yearly',
       year,
@@ -69,7 +67,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const userId = currentUserId(res);
     const month = String(req.query.month ?? new Date().toISOString().slice(0, 7));
-    res.json({ type: 'category', month, categories: expenseByCategory(userId, month) });
+    res.json({ type: 'category', month, categories: await expenseByCategory(userId, month) });
   }),
 );
 
@@ -78,23 +76,27 @@ router.get(
   asyncHandler(async (req, res) => {
     const userId = currentUserId(res);
     const month = String(req.query.month ?? new Date().toISOString().slice(0, 7));
-    const rows = db
+    const rows = await db
       .prepare(
         `SELECT COALESCE(payment_method, 'Unspecified') AS method, SUM(amount) AS total
-         FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?
-         GROUP BY method ORDER BY total DESC`,
+         FROM expenses WHERE user_id = ? AND substr(date, 1, 7) = ?
+         GROUP BY COALESCE(payment_method, 'Unspecified') ORDER BY total DESC`,
       )
       .all(userId, month);
-    res.json({ type: 'payment-method', month, methods: rows });
+    res.json({
+      type: 'payment-method',
+      month,
+      methods: rows.map((r) => ({ method: String(r.method), total: Number(r.total) || 0 })),
+    });
   }),
 );
 
 router.get(
   '/goals',
   asyncHandler(async (_req, res) => {
-    const rows = db
+    const rows = (await db
       .prepare('SELECT * FROM goals WHERE user_id = ? ORDER BY created_at DESC')
-      .all(currentUserId(res)) as {
+      .all(currentUserId(res))) as {
       target_amount: number;
       current_amount: number;
     }[];

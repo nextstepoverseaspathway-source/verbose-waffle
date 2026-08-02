@@ -23,13 +23,13 @@ router.get(
 
     // A budget applies to a month if it is explicitly for that month or is a
     // default (month IS NULL). Explicit month wins when both exist.
-    const budgets = db
+    const budgets = (await db
       .prepare(
         `SELECT * FROM budgets
          WHERE user_id = ? AND (month = ? OR month IS NULL)
          ORDER BY category`,
       )
-      .all(userId, month) as Budget[];
+      .all(userId, month)) as Budget[];
 
     // Collapse to one row per category (prefer explicit month).
     const byCategory = new Map<string, Budget>();
@@ -39,15 +39,15 @@ router.get(
     }
 
     // Spent per category for the month.
-    const spentRows = db
+    const spentRows = (await db
       .prepare(
         `SELECT category, SUM(amount) AS spent
          FROM expenses
-         WHERE user_id = ? AND strftime('%Y-%m', date) = ?
+         WHERE user_id = ? AND substr(date, 1, 7) = ?
          GROUP BY category`,
       )
-      .all(userId, month) as { category: string; spent: number }[];
-    const spentMap = new Map(spentRows.map((r) => [r.category, r.spent]));
+      .all(userId, month)) as { category: string; spent: number }[];
+    const spentMap = new Map(spentRows.map((r) => [r.category, Number(r.spent) || 0]));
 
     const data = [...byCategory.values()].map((b) => {
       const spent = spentMap.get(b.category) ?? 0;
@@ -68,18 +68,15 @@ router.put(
   asyncHandler(async (req, res) => {
     const body = budgetSchema.parse(req.body);
     const userId = currentUserId(res);
-    // Upsert on (user, category, month).
-    db.prepare(
-      `INSERT INTO budgets (user_id, category, month, amount)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_id, category, month) DO UPDATE SET amount = excluded.amount`,
-    ).run(userId, body.category, body.month ?? null, body.amount);
-
-    const row = db
+    // Upsert on (user, category, month) and return the resulting row.
+    const row = await db
       .prepare(
-        'SELECT * FROM budgets WHERE user_id = ? AND category = ? AND month IS ?',
+        `INSERT INTO budgets (user_id, category, month, amount)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, category, month) DO UPDATE SET amount = excluded.amount
+         RETURNING *`,
       )
-      .get(userId, body.category, body.month ?? null);
+      .get(userId, body.category, body.month ?? null, body.amount);
     res.json({ data: row });
   }),
 );
@@ -87,9 +84,9 @@ router.put(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const result = db
+    const result = await db
       .prepare('DELETE FROM budgets WHERE id = ? AND user_id = ?')
-      .run(req.params.id, currentUserId(res));
+      .run(Number(req.params.id), currentUserId(res));
     if (result.changes === 0) throw new ApiError(404, 'Budget not found');
     res.status(204).end();
   }),
