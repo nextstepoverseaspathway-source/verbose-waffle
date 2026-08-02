@@ -30,18 +30,20 @@ router.post(
   '/register',
   asyncHandler(async (req, res) => {
     const { name, email, password } = registerSchema.parse(req.body);
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+    const existing = await db
+      .prepare('SELECT id FROM users WHERE email = ?')
+      .get(email.toLowerCase());
     if (existing) throw new ApiError(409, 'An account with this email already exists');
 
     const hash = await bcrypt.hash(password, 10);
-    const info = db
+    const inserted = await db
       .prepare(
         `INSERT INTO users (email, name, password_hash, provider)
-         VALUES (?, ?, ?, 'email')`,
+         VALUES (?, ?, ?, 'email') RETURNING id`,
       )
-      .run(email.toLowerCase(), name, hash);
+      .get(email.toLowerCase(), name, hash);
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as User;
+    const user = (await db.prepare('SELECT * FROM users WHERE id = ?').get(inserted!.id)) as User;
     const token = signToken({ sub: user.id, email: user.email });
     res.status(201).json({ token, user: toPublic(user) });
   }),
@@ -51,9 +53,9 @@ router.post(
   '/login',
   asyncHandler(async (req, res) => {
     const { email, password } = loginSchema.parse(req.body);
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as
-      | User
-      | undefined;
+    const user = (await db
+      .prepare('SELECT * FROM users WHERE email = ?')
+      .get(email.toLowerCase())) as User | undefined;
     if (!user || !user.password_hash) throw new ApiError(401, 'Invalid email or password');
 
     const ok = await bcrypt.compare(password, user.password_hash);
@@ -77,12 +79,14 @@ router.post(
     const name = String(req.body.name ?? '').trim() || email.split('@')[0];
     if (!email) throw new ApiError(400, 'email is required');
 
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+    let user = (await db.prepare('SELECT * FROM users WHERE email = ?').get(email)) as
+      | User
+      | undefined;
     if (!user) {
-      const info = db
-        .prepare(`INSERT INTO users (email, name, provider) VALUES (?, ?, 'google')`)
-        .run(email, name);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as User;
+      const inserted = await db
+        .prepare(`INSERT INTO users (email, name, provider) VALUES (?, ?, 'google') RETURNING id`)
+        .get(email, name);
+      user = (await db.prepare('SELECT * FROM users WHERE id = ?').get(inserted!.id)) as User;
     }
     const token = signToken({ sub: user.id, email: user.email });
     res.json({ token, user: toPublic(user) });
@@ -93,7 +97,9 @@ router.get(
   '/me',
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(currentUserId(res)) as User;
+    const user = (await db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .get(currentUserId(res))) as User;
     res.json({ user: toPublic(user) });
   }),
 );

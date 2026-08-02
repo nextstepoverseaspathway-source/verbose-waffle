@@ -15,13 +15,14 @@ process.env.JWT_SECRET = 'test-secret';
 
 // Dynamic import so the env vars above take effect.
 const { createApp } = await import('./app');
+const { initDb } = await import('./db/database');
 const app = createApp();
 
 let token = '';
 
 describe('Smart Savings Tracker API', () => {
-  beforeAll(() => {
-    /* app + schema created on import */
+  beforeAll(async () => {
+    await initDb(); // create the schema before requests
   });
 
   afterAll(() => {

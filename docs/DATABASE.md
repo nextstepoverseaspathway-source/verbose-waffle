@@ -85,19 +85,36 @@ idx_budgets_user        (user_id)
 These cover the hot query paths: per-user listing ordered by date, and
 per-user category aggregation for reports and budgets.
 
-## PostgreSQL Notes
+## Dual backend: SQLite and PostgreSQL
 
-The schema is portable with minor adjustments:
+The app runs on **both** backends behind one small async adapter
+(`server/src/db/database.ts`):
+
+- **SQLite** (`better-sqlite3`) by default — zero-config local development.
+- **PostgreSQL** (`pg`) when `DATABASE_URL` is set — durable production storage.
+
+There are two schema files with equivalent structure:
+`schema.sql` (SQLite) and `schema.postgres.sql` (Postgres). The type mapping:
 
 | SQLite | PostgreSQL |
 | --- | --- |
-| `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` / `GENERATED ALWAYS AS IDENTITY` |
-| `REAL` | `NUMERIC(14,2)` (recommended for money) |
-| `datetime('now')` | `NOW()` |
-| `strftime('%Y-%m', date)` | `to_char(date, 'YYYY-MM')` |
-| boolean as `INTEGER 0/1` | native `BOOLEAN` |
+| `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` |
+| `REAL` | `DOUBLE PRECISION` |
+| `datetime('now')` default | `now()` (`TIMESTAMPTZ`) |
+| boolean as `INTEGER 0/1` | `SMALLINT 0/1` |
 
-When `DATABASE_URL` is set, swap `server/src/db/database.ts` for a `pg`-backed
-adapter exposing the same `prepare/run/get/all` surface (or introduce an ORM
-such as Prisma/Knex). Query logic in the routes stays unchanged because it uses
-plain parameterized SQL. See [DEPLOYMENT.md](./DEPLOYMENT.md).
+### Dialect-neutral queries
+
+Application queries are written in a subset that behaves identically on both
+engines, so the routes are backend-agnostic:
+
+- Dates are stored as `TEXT` in `YYYY-MM-DD` form, and month/year grouping uses
+  `substr(date, 1, 7)` / `substr(date, 1, 4)` instead of SQLite's `strftime`
+  or Postgres's `to_char`.
+- Inserts that need the new id use `INSERT … RETURNING id`.
+- Upserts use `INSERT … ON CONFLICT … DO UPDATE … RETURNING *`.
+- The adapter translates `?` and `@named` placeholders to Postgres `$1, $2, …`.
+
+Both paths are covered by tests: `app.test.ts` (SQLite) and
+`app.postgres.test.ts` (Postgres via in-memory `pg-mem`). See
+[DEPLOYMENT.md](./DEPLOYMENT.md) for enabling Postgres in production.

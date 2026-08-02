@@ -21,6 +21,13 @@ import settingsRoutes from './routes/settings';
 export function createApp() {
   const app = express();
 
+  // Ensure the receipts upload directory exists (best-effort; non-fatal).
+  try {
+    fs.mkdirSync(config.uploadsDir, { recursive: true });
+  } catch {
+    /* uploads may be unavailable on read-only hosts; app still runs */
+  }
+
   app.use(
     cors({
       origin: config.clientOrigins.length ? config.clientOrigins : true,
