@@ -153,8 +153,32 @@ function resolveWritableDbPath(preferred: string): string {
 // Postgres backend
 // ---------------------------------------------------------------------------
 function createPostgresDb(): Db {
+  // Normalize the connection string and log safe diagnostics so startup
+  // failures (e.g. a truncated password from a copy/paste) are easy to spot
+  // without ever printing the secret itself.
+  const raw = (config.databaseUrl ?? '').trim();
+  let connectionString = raw;
+  try {
+    const u = new URL(raw);
+    const passwordLength = decodeURIComponent(u.password || '').length;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[db] postgres target host=${u.hostname} user=${u.username} ` +
+        `db=${u.pathname.replace('/', '')} passwordLength=${passwordLength} ` +
+        `channel_binding=${u.searchParams.get('channel_binding') ?? 'none'}`,
+    );
+    // node-postgres does not perform channel binding; Neon appends
+    // `channel_binding=require` by default, which can trip up the handshake.
+    // Dropping it lets standard SCRAM auth proceed with the password.
+    u.searchParams.delete('channel_binding');
+    connectionString = u.toString();
+  } catch {
+    // eslint-disable-next-line no-console
+    console.warn('[db] DATABASE_URL could not be parsed as a URL; using raw value.');
+  }
+
   const pool = new Pool({
-    connectionString: config.databaseUrl,
+    connectionString,
     // Managed Postgres (Neon, Render, etc.) requires TLS.
     ssl: { rejectUnauthorized: false },
   });
