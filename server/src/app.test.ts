@@ -15,9 +15,10 @@ process.env.JWT_SECRET = 'test-secret';
 
 // Dynamic import so the env vars above take effect.
 const { createApp } = await import('./app');
-const { initDb } = await import('./db/database');
+const { initDb, db } = await import('./db/database');
 const app = createApp();
 
+const EMAIL = 'test@example.com';
 let token = '';
 
 describe('Smart Savings Tracker API', () => {
@@ -39,13 +40,49 @@ describe('Smart Savings Tracker API', () => {
     expect(res.body.status).toBe('ok');
   });
 
-  it('registers a new user and returns a token', async () => {
+  it('rejects weak and short passwords on register', async () => {
+    const short = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Test', email: 'x@example.com', password: 'short1' });
+    expect(short.status).toBe(422);
+
+    const weak = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Test', email: 'x@example.com', password: 'demo1234' });
+    expect(weak.status).toBe(422);
+  });
+
+  it('registers a new user but does not issue a token (verification required)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Test', email: 'test@example.com', password: 'secret123' });
+      .send({ name: 'Test', email: EMAIL, password: 'secret1234' });
     expect(res.status).toBe(201);
-    expect(res.body.token).toBeTruthy();
-    token = res.body.token;
+    expect(res.body.token).toBeUndefined();
+    expect(res.body.requiresVerification).toBe(true);
+  });
+
+  it('blocks login until the email is verified', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: EMAIL, password: 'secret1234' });
+    expect(res.status).toBe(403);
+  });
+
+  it('verifies the email via the token, then logs in successfully', async () => {
+    const row = (await db
+      .prepare('SELECT verification_token FROM users WHERE email = ?')
+      .get(EMAIL)) as { verification_token: string };
+    expect(row.verification_token).toBeTruthy();
+
+    const verify = await request(app).get(`/api/auth/verify?token=${row.verification_token}`);
+    expect(verify.status).toBe(302); // redirects back to the SPA
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: EMAIL, password: 'secret1234' });
+    expect(login.status).toBe(200);
+    expect(login.body.token).toBeTruthy();
+    token = login.body.token;
   });
 
   it('rejects unauthenticated income access', async () => {

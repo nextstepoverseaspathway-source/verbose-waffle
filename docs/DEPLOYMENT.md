@@ -137,6 +137,31 @@ Prefer keeping SQLite but making it durable instead? Attach a persistent disk
 (paid) and point `SQLITE_PATH` at the mount — see the commented block in
 [`render.yaml`](../render.yaml).
 
+## 5b. Email verification (Resend)
+
+New **email** accounts must verify their address before they can log in
+(Google accounts are trusted and auto-verified). Verification emails are sent
+via [Resend](https://resend.com).
+
+1. Create a Resend account and an **API key**.
+2. Verify a sending domain in Resend (for quick testing you can use their
+   shared `onboarding@resend.dev` sender, which only delivers to the account
+   owner's address).
+3. Set these environment variables on your host:
+   - `RESEND_API_KEY` — your Resend API key (**required to send real emails**).
+   - `RESEND_FROM` — e.g. `Smart Savings Tracker <no-reply@yourdomain.com>`.
+   - `APP_URL` — your public URL (e.g. `https://your-app.onrender.com`), used
+     to build the verification link.
+
+Flow: `POST /auth/register` creates the account and emails a link to
+`GET /auth/verify?token=…`; clicking it marks the account verified and
+redirects to `/login?verified=1`. `POST /auth/login` returns `403` until then.
+
+> If `RESEND_API_KEY` is not set, the app still works but instead of sending an
+> email it **logs the verification link to the server console** — open the logs,
+> copy the link, and visit it to verify. Good for local development; set a real
+> key in production.
+
 ## 6. Firebase Authentication (Google & Email)
 
 The app ships with a provider-agnostic auth API. To use **Firebase**:

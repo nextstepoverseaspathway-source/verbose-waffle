@@ -50,3 +50,14 @@ services:
       # which resets on restart — fine for a quick demo, not for real data.
       - key: DATABASE_URL
         sync: false
+      # Public URL of this service, used to build email verification links.
+      # Set to your Render URL, e.g. https://smart-savings-tracker.onrender.com
+      - key: APP_URL
+        sync: false
+      # Email verification via Resend (https://resend.com). New email accounts
+      # must verify before logging in. If RESEND_API_KEY is unset, verification
+      # links are logged to the service console instead of emailed.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: Smart Savings Tracker <onboarding@resend.dev>

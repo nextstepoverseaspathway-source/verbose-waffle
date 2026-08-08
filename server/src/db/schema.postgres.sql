@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   language       TEXT    NOT NULL DEFAULT 'en',
   theme          TEXT    NOT NULL DEFAULT 'system' CHECK (theme IN ('light','dark','system')),
   monthly_budget DOUBLE PRECISION NOT NULL DEFAULT 0,
+  email_verified SMALLINT NOT NULL DEFAULT 0 CHECK (email_verified IN (0,1)),
+  verification_token TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

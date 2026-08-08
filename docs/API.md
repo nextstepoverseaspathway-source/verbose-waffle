@@ -16,14 +16,24 @@ Validation errors return HTTP `422` with a `details` array.
 ## Authentication
 
 ### `POST /auth/register`
-Create an email account.
+Create an email account. The password must be **at least 8 characters** and not
+a common weak password (e.g. `password123`, `demo1234`) — otherwise `422`.
 
-**Body:** `{ "name": string, "email": string, "password": string (min 6) }`
-**Response `201`:** `{ "token": string, "user": PublicUser }`
+A verification email is sent (via Resend). **No token is returned** — the user
+must verify their email before they can log in.
+
+**Body:** `{ "name": string, "email": string, "password": string (min 8) }`
+**Response `201`:** `{ "requiresVerification": true, "emailSent": boolean, "message": string, "user": PublicUser }`
+
+### `GET /auth/verify?token=…`
+Confirms an email verification token, marks the account verified, and
+redirects back to the SPA at `/login?verified=1` (or `?verified=0` if the
+token is invalid/expired). This is the link delivered in the verification email.
 
 ### `POST /auth/login`
 **Body:** `{ "email": string, "password": string }`
 **Response `200`:** `{ "token": string, "user": PublicUser }`
+**`403`** if the email has not been verified yet.
 
 ### `POST /auth/google`
 Federated sign-in. In production, verify a Firebase ID token first (see

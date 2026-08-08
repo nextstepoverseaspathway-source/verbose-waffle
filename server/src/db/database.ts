@@ -129,6 +129,19 @@ function createSqliteDb(): Db {
     async init() {
       const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
       sqlite.exec(schema);
+      // Idempotent migrations for databases created before a column existed.
+      // SQLite lacks ADD COLUMN IF NOT EXISTS, so check the table info first.
+      const cols = sqlite.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+      const has = (c: string) => cols.some((col) => col.name === c);
+      if (!has('email_verified')) {
+        sqlite.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+        // Grandfather accounts that predate verification so they aren't locked
+        // out. New signups insert email_verified = 0 explicitly and must verify.
+        sqlite.exec('UPDATE users SET email_verified = 1');
+      }
+      if (!has('verification_token')) {
+        sqlite.exec('ALTER TABLE users ADD COLUMN verification_token TEXT');
+      }
     },
   };
 }
@@ -242,6 +255,17 @@ function createPostgresDb(): Db {
       for (const stmt of statements) {
         await pool.query(stmt);
       }
+      // Idempotent migrations for databases created before a column existed.
+      // Only backfill on the actual add so we grandfather pre-existing accounts
+      // (marking them verified) without re-verifying everyone on each restart.
+      const existing = await pool.query(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email_verified'",
+      );
+      if ((existing.rowCount ?? 0) === 0) {
+        await pool.query('ALTER TABLE users ADD COLUMN email_verified SMALLINT NOT NULL DEFAULT 0');
+        await pool.query('UPDATE users SET email_verified = 1'); // grandfather existing accounts
+      }
+      await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT');
     },
   };
 }

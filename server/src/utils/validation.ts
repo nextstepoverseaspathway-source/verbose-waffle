@@ -9,10 +9,47 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format');
 
+/**
+ * A small blocklist of well-known weak passwords. Compared case-insensitively.
+ * This is a pragmatic guard, not a substitute for a full breached-password
+ * check — it simply rejects the most obvious choices.
+ */
+const WEAK_PASSWORDS = new Set([
+  'password',
+  'password1',
+  'password12',
+  'password123',
+  'password1234',
+  'passw0rd',
+  '12345678',
+  '123456789',
+  '1234567890',
+  'qwerty123',
+  'qwertyuiop',
+  'demo1234',
+  'demo12345',
+  'admin123',
+  'letmein123',
+  'welcome123',
+  'iloveyou1',
+  'changeme123',
+  'abcd1234',
+  'test1234',
+]);
+
+/** Password policy: at least 8 characters and not a known weak password. */
+const passwordField = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(200)
+  .refine((pw) => !WEAK_PASSWORDS.has(pw.toLowerCase()), {
+    message: 'That password is too common. Please choose a stronger one.',
+  });
+
 export const registerSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   email: z.string().email(),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: passwordField,
 });
 
 export const loginSchema = z.object({
