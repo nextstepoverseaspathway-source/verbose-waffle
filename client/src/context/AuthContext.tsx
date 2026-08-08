@@ -10,7 +10,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<RegisterResult>;
   loginWithGoogle: (email: string, name: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -22,6 +22,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 interface AuthResponse {
   token: string;
   user: User;
+}
+
+/** Registration now requires email verification, so no token is returned. */
+export interface RegisterResult {
+  requiresVerification?: boolean;
+  emailSent?: boolean;
+  message?: string;
+  user?: User;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -47,7 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (name: string, email: string, password: string) => {
-    handleAuth(await api.post<AuthResponse>('/auth/register', { name, email, password }, false));
+    // Registration does not sign the user in — they must verify their email.
+    return api.post<RegisterResult>('/auth/register', { name, email, password }, false);
   };
 
   const loginWithGoogle = async (email: string, name: string) => {

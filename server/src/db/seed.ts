@@ -30,8 +30,8 @@ async function seed() {
   const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
   const userRow = await db
     .prepare(
-      `INSERT INTO users (email, name, password_hash, provider, currency, theme, monthly_budget)
-       VALUES (?, ?, ?, 'email', 'INR', 'system', 60000) RETURNING id`,
+      `INSERT INTO users (email, name, password_hash, provider, currency, theme, monthly_budget, email_verified)
+       VALUES (?, ?, ?, 'email', 'INR', 'system', 60000, 1) RETURNING id`,
     )
     .get(DEMO_EMAIL, 'Demo User', hash);
   const userId = Number(userRow!.id);

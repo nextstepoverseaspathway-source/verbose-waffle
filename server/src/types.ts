@@ -13,11 +13,13 @@ export interface User {
   language: string;
   theme: 'light' | 'dark' | 'system';
   monthly_budget: number;
+  email_verified: 0 | 1;
+  verification_token: string | null;
   created_at: string;
 }
 
 /** User object safe to send to the client (no secrets). */
-export type PublicUser = Omit<User, 'password_hash'>;
+export type PublicUser = Omit<User, 'password_hash' | 'verification_token'>;
 
 export interface Income {
   id: number;

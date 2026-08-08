@@ -129,6 +129,16 @@ function createSqliteDb(): Db {
     async init() {
       const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
       sqlite.exec(schema);
+      // Idempotent migrations for databases created before a column existed.
+      // SQLite lacks ADD COLUMN IF NOT EXISTS, so check the table info first.
+      const cols = sqlite.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+      const has = (c: string) => cols.some((col) => col.name === c);
+      if (!has('email_verified')) {
+        sqlite.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+      }
+      if (!has('verification_token')) {
+        sqlite.exec('ALTER TABLE users ADD COLUMN verification_token TEXT');
+      }
     },
   };
 }
@@ -242,6 +252,11 @@ function createPostgresDb(): Db {
       for (const stmt of statements) {
         await pool.query(stmt);
       }
+      // Idempotent migrations for databases created before a column existed.
+      await pool.query(
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified SMALLINT NOT NULL DEFAULT 0',
+      );
+      await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT');
     },
   };
 }

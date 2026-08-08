@@ -32,9 +32,10 @@ const { adapter } = vi.hoisted(() => {
 vi.mock('pg', () => ({ default: adapter, Pool: adapter.Pool, Client: adapter.Client }));
 
 const { createApp } = await import('./app');
-const { initDb } = await import('./db/database');
+const { initDb, db } = await import('./db/database');
 const app = createApp();
 
+const EMAIL = 'pg@example.com';
 let token = '';
 
 describe('Smart Savings Tracker API (Postgres backend)', () => {
@@ -43,17 +44,31 @@ describe('Smart Savings Tracker API (Postgres backend)', () => {
   });
 
   it('reports the postgres dialect', async () => {
-    const { db } = await import('./db/database');
     expect(db.dialect).toBe('postgres');
   });
 
-  it('registers a user (RETURNING id insert)', async () => {
-    const res = await request(app)
+  it('registers, verifies, and logs in (RETURNING insert + verification flow)', async () => {
+    const reg = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'PG', email: 'pg@example.com', password: 'secret123' });
-    expect(res.status).toBe(201);
-    expect(res.body.token).toBeTruthy();
-    token = res.body.token;
+      .send({ name: 'PG', email: EMAIL, password: 'secret1234' });
+    expect(reg.status).toBe(201);
+    expect(reg.body.requiresVerification).toBe(true);
+    expect(reg.body.token).toBeUndefined();
+
+    const row = (await db
+      .prepare('SELECT verification_token FROM users WHERE email = ?')
+      .get(EMAIL)) as { verification_token: string };
+    expect(row.verification_token).toBeTruthy();
+
+    const verify = await request(app).get(`/api/auth/verify?token=${row.verification_token}`);
+    expect(verify.status).toBe(302);
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: EMAIL, password: 'secret1234' });
+    expect(login.status).toBe(200);
+    expect(login.body.token).toBeTruthy();
+    token = login.body.token;
   });
 
   it('creates income and expenses, then aggregates the dashboard', async () => {

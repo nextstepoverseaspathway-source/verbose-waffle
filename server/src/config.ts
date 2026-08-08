@@ -37,6 +37,14 @@ export const config = {
    * Resolves to <repo>/client/dist relative to the compiled server (dist/).
    */
   clientDist: path.join(__dirname, '..', '..', 'client', 'dist'),
+
+  /** Public base URL of the app, used to build email verification links. */
+  appUrl: process.env.APP_URL ?? process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+
+  /** Resend transactional email. When RESEND_API_KEY is unset, emails are
+   *  logged to the console instead of sent (handy for local development). */
+  resendApiKey: process.env.RESEND_API_KEY,
+  resendFrom: process.env.RESEND_FROM ?? 'Smart Savings Tracker <onboarding@resend.dev>',
 } as const;
 
 export const isProd = config.env === 'production';

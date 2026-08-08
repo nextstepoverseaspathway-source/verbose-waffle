@@ -9,6 +9,7 @@ export interface User {
   language: string;
   theme: 'light' | 'dark' | 'system';
   monthly_budget: number;
+  email_verified: 0 | 1;
   created_at: string;
 }
 

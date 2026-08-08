@@ -2,7 +2,7 @@
  * Authentication screen — email login/register, a Google sign-in stub, and a
  * "forgot password" helper. Designed as a polished split-panel hero.
  */
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
 import { IconWallet } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
@@ -19,13 +19,36 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Handle the redirect back from the email verification link (/login?verified=1|0).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verified = params.get('verified');
+    if (verified === '1') {
+      notify('Email verified! You can now sign in.', 'success');
+    } else if (verified === '0') {
+      notify('That verification link is invalid or has expired.', 'error');
+    }
+    if (verified !== null) window.history.replaceState({}, '', '/login');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === 'login') await login(email, password);
-      else await register(name, email, password);
-      notify('Welcome to Smart Savings Tracker!', 'success');
+      if (mode === 'login') {
+        await login(email, password);
+        notify('Welcome back!', 'success');
+      } else {
+        const res = await register(name, email, password);
+        notify(
+          res.message ?? 'Account created. Check your email for a verification link.',
+          res.emailSent === false ? 'warning' : 'success',
+        );
+        // Registration doesn't sign you in — switch to the sign-in view.
+        setMode('login');
+        setPassword('');
+      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : 'Something went wrong', 'error');
     } finally {
